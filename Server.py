@@ -10,6 +10,57 @@ import threading
 from time import gmtime, strftime, sleep, time, thread_time_ns
 
 
+def cierre():
+    pass
+
+def laser_on_s():
+    pass
+
+def laser_off_s():
+    pass
+
+def laser_on_e():
+    pass
+
+def laser_off_e():
+    pass
+
+def mete_tarjeta():
+    pass
+
+def recoge_tarjeta():
+    pass
+
+def oprime_boton():
+    pass
+
+def apertura(message):
+    print("in function apertura: " + message)
+
+
+def data_processor(message, server_data_table):
+    '''
+    Multi-threading operation
+    For every input data from the client a thread is created
+    and its information is manipulated in this function
+    '''
+
+    # Function dictionary
+    functions = {'apertura': apertura, 'oprimeBoton': oprime_boton,
+                 'recogeTarjeta': recoge_tarjeta, 'meteTarjeta': mete_tarjeta}
+    functions2 = {'laserOffE': laser_off_e, 'laserOnE': laser_on_e, 'laserOffS': laser_off_s,
+                  'laserOnS': laser_on_s, 'cierre': cierre}
+    functions = {**functions, **functions2}
+
+    time_stamp = message[:message.find(' ')]
+    #
+    command = (message[(message.find(time_stamp) + len(time_stamp) + 1) : message.find(' ', (message.find(time_stamp) + len(time_stamp) + 1))]).lower()
+    functions[command](message)
+    # command_thread = threading.Thread(target=functions[command.lower()], args=(message,))
+    # command_thread.start()
+
+
+
 def establish_connection():
     '''
         Function to Establish connection with the client
@@ -20,7 +71,7 @@ def establish_connection():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     # Bind the socket to the port
-    server_address = ('localhost', 8888)
+    server_address = ('localhost', 8080)
     print('starting up on %s port %s' % server_address)
     sock.bind(server_address)
 
@@ -29,10 +80,6 @@ def establish_connection():
 
     print('waiting for a connection')
     return sock.accept()
-
-
-def data_processor(message):
-    print("Thread says: " + message)
 
 
 def main():
@@ -47,11 +94,13 @@ def main():
     occupied_places_var = 0
 
     # Buffer semaphores
-    free_places = threading.Semaphore(value=free_places_var)
-    occupied_places = threading.Semaphore(value=occupied_places_var)
+    sem_free_places = threading.Semaphore(value=free_places_var)
+    sem_occupied_places = threading.Semaphore(value=occupied_places_var)
+    sem_mutex_table = threading.Semaphore(value=1)
 
     # Establishing connection with the server
     connection, client_address = establish_connection()
+
 
     try:
         print('connection from', client_address)
@@ -70,12 +119,10 @@ def main():
             if data:
                 client_message = data.decode('utf-8')
 
-                t = threading.Thread(target=data_processor, args=(client_message,))
-                t.start()
+                data_processor(client_message, server_data_table)
 
                 connection.sendall(b'data received...')
 
-                server_data_table['Time-stamp'].append(client_message[:client_message.find(' ')])
             else:
                 print('no data from', client_address)
                 connection.close()
