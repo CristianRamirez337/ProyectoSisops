@@ -10,7 +10,7 @@ print('connecting to %s port %s' % server_address)
 sock.connect(server_address)
 
 
-messages = ['0.00 Apertura 50 2', '1.00 oprimeBoton 1', '49.00 meteTarjeta 1']
+messages = ['0.00 Apertura 50 2 2', '1.00 oprimeBoton 1', '49.00 meteTarjeta 1', '50.00 Cierre']
 try:
     # Send data
     for m in messages:
