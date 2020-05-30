@@ -9,8 +9,7 @@ server_address = ('localhost', 8080)
 print('connecting to %s port %s' % server_address)
 sock.connect(server_address)
 
-
-messages = ['0.00 Apertura 50 2 2', '1.00 oprimeBoton 1', '49.00 meteTarjeta 1', '50.00 Cierre']
+messages = ['0.00 Apertura 50 2 2', '1.00 oprimeBoton 1', '49.00 meteTarjeta 1', '29.0 oprimeBoton 1', '55.00 Cierre']
 try:
     # Send data
     for m in messages:
@@ -24,7 +23,6 @@ finally:
     sock.close()
 
 
-
     def main(args):
         return 0
 
@@ -33,4 +31,3 @@ finally:
         import sys
 
         sys.exit(main(sys.argv))
-

@@ -9,6 +9,7 @@ import sys
 import threading
 import queue
 from time import gmtime, strftime, sleep, time, thread_time_ns
+from tabulate import tabulate
 
 # GLobal variables
 number_exits = 0
@@ -22,12 +23,14 @@ def get_data_command(message):
     time_stamp = message[:message.find(' ')]
     command = message[(message.find(time_stamp) + len(time_stamp) + 1): message.find(' ', (
             message.find(time_stamp) + len(time_stamp) + 1))]
-    number = message[(message.find(command) + len(command) + 1): message.find(' ', (
-            message.find(command) + len(command) + 1))]
+    number = message[(message.find(command) + len(command) + 1):]
     if command == 'Cierr':
         command = 'Cierre'
     return time_stamp, command, number
 
+
+def cierre(message):
+    pass
 
 def laser_on_s(message):
     pass
@@ -47,7 +50,46 @@ def mete_tarjeta(message):
 def recoge_tarjeta(message):
     pass
 
+def server_data_table_modificator(time_stamp, command, server_display, occupied, free):
+    server_data_table['Time-stamp'].append(time_stamp)
+    server_data_table['Command'].append(command)
+    server_data_table['Free'].append(free)
+    server_data_table['Occupied'].append(occupied)
+    server_data_table['Server display'].append(server_display)
+
+def oprime_botom_thread(message):
+    [time_stamp, command, number] = get_data_command(message)
+
+    sem_mutex_table.acquire()
+    server_display = ' '
+    server_data_table_modificator(time_stamp, message[message.find(command):], server_display, occupied_places_var, free_places_var)
+    server_display = ('Se comienza a imprimir tarjeta por E' + str(number))
+    print("NUMBER IS")
+    print(number)
+    server_data_table_modificator(time_stamp, ' ', server_display, ' ', ' ')
+    sem_mutex_table.release()
+
+    #sleep(5)
+
+    sem_mutex_table.acquire()
+    server_display = 'Se imprimió tarjeta. ' + strftime("%a, %d %b %Y %H:%M:%S 0", gmtime())
+    server_data_table_modificator(float(time_stamp) + 5, ' ', server_display, ' ', ' ')
+    sem_mutex_table.release()
+
+
 def oprime_boton(message):
+    '''If there is an available place it will print a card with the SO hour, otherwise
+    it will display: No hay lugar, espere un poco y vuelva a imprimir boton'''
+
+    [time_stamp, command, number] = get_data_command(message)
+
+    if sem_free_places.acquire(timeout=1):
+
+        boton_thread = threading.Thread(target=oprime_botom_thread, args=(message,))
+        boton_thread.start()
+    else:
+        print("No hay lugar, espere un poco y vuelva a presionar el boton")
+
     pass
 
 
@@ -62,16 +104,14 @@ def abrir_cerrar(message):
     if 'Apertura' in command:
         server_data_table['Time-stamp'].append(time_stamp)
         server_data_table['Command'].append(message[message.find(command):])
-        server_data_table['Free'].append(int(number))
+        server_data_table['Free'].append(int(number[:number.find(' ')]))
         server_data_table['Occupied'].append(0)
         number_entries = message[(message.find(number) + len(number) + 1) : message.find(' ', (
             message.find(number) + len(number) + 1))]
         number_exits = message[(message.find(number_entries) + len(number_entries) + 1) : ]
         server_data_table['Server display'].append('Se abre un estacionamiento de ' + number + ' lugares, ' + number_entries + ' puertas de entrada y ' + number_exits + ' de salida')
-        free_places_var = int(number)
+        free_places_var = int(number[:number.find(' ')])
         # Buffer semaphores
-        sem_free_places = threading.Semaphore(value=free_places_var)
-        sem_occupied_places = threading.Semaphore(value=occupied_places_var)
 
         return True
 
@@ -83,7 +123,7 @@ def abrir_cerrar(message):
 
         # PRINT TABLE HERE
         print("Parking lot has been closed")
-        print(server_data_table)
+        print(tabulate(server_data_table, headers=['Time-stamp', 'Command', 'Server display', 'Free', 'Occupied']))
         sys.exit()
         #return False
 
@@ -134,53 +174,53 @@ def establish_connection():
     return sock.accept()
 
 
-def main():
-    ''' Main function of the parking lot system'''
 
-    # --------/ Variables \--------
-    sem_mutex_table = threading.Semaphore(value=1)
+''' Main function of the parking lot system'''
 
-    # Establishing connection with the server
-    connection, client_address = establish_connection()
+# --------/ Variables \--------
+sem_mutex_table = threading.Semaphore(value=1)
+sem_mutex_places = threading.Semaphore(value=1)
 
-
-    try:
-        print('connection from', client_address)
-
-        # Getting time from the processor
-        current_time = strftime("%a, %d %b %Y %H:%M:%S 0", gmtime())
-        print("Starting time is: " + current_time)
-        parking_open = False
+# Establishing connection with the server
+connection, client_address = establish_connection()
 
 
-        # Receiving the data
-        while True:
-            data = connection.recv(256)
-            print('server received "%s"' % data.decode('utf-8'))  # data bytes back to str
+try:
+    print('connection from', client_address)
 
-            if data:
+    # Getting time from the processor
+    current_time = strftime("%a, %d %b %Y %H:%M:%S 0", gmtime())
+    print("Starting time is: " + current_time)
+    parking_open = False
 
-                client_message = data.decode('utf-8')
 
+    # Receiving the data
+    while True:
+        data = connection.recv(256)
+        print('server received "%s"' % data.decode('utf-8'))  # data bytes back to str
+
+        if data:
+
+            client_message = data.decode('utf-8')
+
+            if parking_open:
+
+                data_processor(client_message)
+
+            else:
+                parking_open = abrir_cerrar(client_message)
                 if parking_open:
+                    sem_free_places = threading.Semaphore(value=free_places_var)
+                    sem_occupied_places = threading.Semaphore(value=occupied_places_var)
 
-                    data_processor(client_message)
-
-                else:
-                    parking_open = abrir_cerrar(client_message)
-
-                connection.sendall(b'data received...')
-            # else:
-            #     print('no data from', client_address)
-            #     connection.close()
-            #     sys.exit()
+            connection.sendall(b'data received...')
+        # else:
+        #     print('no data from', client_address)
+        #     connection.close()
+        #     sys.exit()
 
 
-    finally:
-        # Clean up the connection
-        print('se fue al finally')
-        connection.close()
-
-
-if __name__ == '__main__':
-    main()
+finally:
+    # Clean up the connection
+    print('se fue al finally')
+    connection.close()
