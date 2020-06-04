@@ -41,10 +41,48 @@ def server_data_table_modificator(time_stamp, command, server_display, occupied,
     server_data_table['Server display'].append(server_display)
 
 def laser_on_s(message):
-    pass
+    ''''Carro termina de salir'''
+    [time_stamp, command, number] = get_data_command(message, 2)
+
+    # Se suma uno a lugares disponibles y se resta a los ocupados
+    sem_mutex_places.acquire()
+    global occupied_places_var, free_places_var
+    occupied_places_var -= 1
+    free_places_var += 1
+    sem_mutex_places.release()
+
+    # Modificando la tabla
+    sem_mutex_table.acquire()
+    server_data_table_modificator(time_stamp, message[message.find(command):], ' ', ' ', ' ')
+    server_display = 'Auto termina de salir en S' + number
+    server_data_table_modificator(time_stamp, ' ', server_display, occupied_places_var, free_places_var)
+    sem_mutex_table.release()
+
+    # Se libera semaforo para que pueda pasar un coche por la misma salida
+    sem_entries_exits[int(number) - 1 + number_entries].release()
+
+    # Un lugar más disponible en el estacionamiento
+    sem_free_places.release()
+
+    # Modificacion de tabla con semaforo
+    sem_mutex_table.acquire()
+    server_display = 'Se bajó la barra s' + number
+    server_data_table_modificator(float(time_stamp) + 5, ' ', server_display, ' ', ' ')
+    sem_mutex_table.release()
 
 def laser_off_s(message):
-    pass
+    '''Sale un coche'''
+    # Separando el mensaje en valores
+    [time_stamp, command, number] = get_data_command(message, 2)
+
+    # Toma el semaforo de la entrada correspondiente
+    sem_entries_exits[int(number) - 1 + number_entries].acquire()
+
+    # Modificando la tabla
+    sem_mutex_table.acquire()
+    server_display = 'Comienza a salir carro por S' + number
+    server_data_table_modificator(float(time_stamp) + 5, ' ', server_display, ' ', ' ')
+    sem_mutex_table.release()
 
 def laser_on_e(message):
     '''The car has finished going through the entrance, the number of occupied and free places
@@ -92,34 +130,44 @@ def laser_off_e(message):
     server_data_table_modificator(time_stamp, ' ', server_display, ' ', ' ')
     sem_mutex_table.release()
 
+def mete_tarjeta_thread(message):
+    # Modificacion de la tabla
+    sem_mutex_table.acquire()
+    server_data_table_modificator(time_stamp, message[message.find(command):], ' ', ' ', ' ')
+    server_display = 'Auto quiere salir por S' + number
+    server_data_table_modificator(time_stamp, ' ', server_display, ' ', ' ')
+    sem_mutex_table.release()
+
+    sem_mutex_table.acquire()
+    server_display = 'Se levantó la barrera S' + number
+    server_data_table_modificator(float(time_stamp) + 5, ' ', server_display, ' ', ' ')
+    sem_mutex_table.release()
+
 
 def mete_tarjeta(message):
     '''It verifies that the client paid the ticket bill, and if not,
     the barrier stays down, otherwise it starts to lift'''
 
     # Separando el mensaje en valores
-    [time_stamp, command, number] = get_data_command(message, 2)
-    number = number[:number.find(' ')]
-    paid = int(number[number.find(' ') + 1:])
+    [time_stamp, command, number, paid] = get_data_command(message, 3)
 
-    # Modificacion de la tabla
-    sem_mutex_table.acquire()
-    server_data_table_modificator(time_stamp, message[message.find(command):], ' ', ' ', ' ')
-    server_display = 'Auto quiere salir por salida S' + number
-    server_data_table_modificator(time_stamp, ' ', server_display, ' ', ' ')
-    sem_mutex_table.release()
+    if int(number) <= number_exits and int(number_exits) > 0:
+        # Verificando si pago el don
+        if paid == 1:
 
-    # Verificando si pago el don
-    if paid == 1:
-        sem_mutex_table.acquire()
-        server_display = 'Se levantó la barrera S' + number
-        server_data_table_modificator(float(time_stamp) + 5, ' ', server_display, ' ', ' ')
-        sem_mutex_table.release()
+            exit_thread = threading.Thread(target=mete_tarjeta_thread, args=(message,))
+            exit_thread.start()
+
+        else:
+            sem_mutex_table.acquire()
+            server_display = 'Boleto no pagado en S' + number
+            server_data_table_modificator(time_stamp, ' ', server_display, ' ', ' ')
+            sem_mutex_table.release()
     else:
-        sem_mutex_table.acquire()
-        server_display = 'Boleto no pagado en S' + number
-        server_data_table_modificator(time_stamp, ' ', server_display, ' ', ' ')
-        sem_mutex_table.release()
+        print("Número de salida inexistente o incorrecto")
+
+
+
 
 
 def recoge_tarjeta(message):
@@ -141,7 +189,7 @@ def recoge_tarjeta(message):
 
     
 
-def oprime_botom_thread(message):
+def oprime_boton_thread(message):
     '''Thread to handle what happen with the function oprime boton from
     the client'''
     [time_stamp, command, number] = get_data_command(message, 2)
@@ -170,7 +218,7 @@ def oprime_boton(message):
     if int(number) <= number_entries and int(number_entries) > 0:
         if sem_free_places.acquire(timeout=1):
 
-            boton_thread = threading.Thread(target=oprime_botom_thread, args=(message,))
+            boton_thread = threading.Thread(target=oprime_boton_thread, args=(message,))
             boton_thread.start()
         else:
             print("No hay lugar, espere un poco y vuelva a presionar el boton")
