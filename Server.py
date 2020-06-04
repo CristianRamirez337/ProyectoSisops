@@ -20,15 +20,15 @@ occupied_places_var = 0
 server_data_table = {'Time-stamp': [], 'Command': [], 'Server display': [], 'Free': [], 'Occupied': []}
 
 
-def get_data_command(message):
-    '''Elements of the message are obtained from the string and sent back'''
-    time_stamp = message[:message.find(' ')]
-    command = message[(message.find(time_stamp) + len(time_stamp) + 1): message.find(' ', (
-            message.find(time_stamp) + len(time_stamp) + 1))]
-    number = message[(message.find(command) + len(command) + 1):]
-    if command == 'Cierr':
-        command = 'Cierre'
-    return time_stamp, command, number
+def get_data_command(message, maxsplit):
+    '''Elements of the message are obtained from the string and sent back
+    message : message from the client
+    maxplit : quantity of elements to get from the message'''
+    if '/' in message:
+        message = message[:message.find('/')].split(' ', maxsplit)
+    else:
+        message = message.split(' ', maxsplit)
+    return message
 
 
 def server_data_table_modificator(time_stamp, command, server_display, occupied, free):
@@ -50,7 +50,8 @@ def laser_on_e(message):
     '''The car has finished going through the entrance, the number of occupied and free places
     is uupdated as well as the sempahore that guards the door is released. Also, the barrier
     is set to go down and the table is updated'''
-    [time_stamp, command, number] = get_data_command(message)
+    # Getting data from the message ant getting rid of the comments
+    [time_stamp, command, number] = get_data_command(message, 2)
     
     # Se suma uno a lugares ocupados y se resta a los disponibles
     sem_mutex_places.acquire()
@@ -58,7 +59,8 @@ def laser_on_e(message):
     occupied_places_var += 1
     free_places_var -= 1
     sem_mutex_places.release()
-    
+
+    # Modificando la tabla
     sem_mutex_table.acquire()
     server_data_table_modificator(time_stamp, message[message.find(command):], ' ', ' ', ' ')
     server_display = 'Auto termina de pasar E' + number
@@ -68,6 +70,7 @@ def laser_on_e(message):
     # Se libera semaforo para que pueda pasar un coche por la misma entrada
     sem_entries_exits[int(number) - 1].release()
 
+    # Modificacion de tabla con semaforo
     sem_mutex_table.acquire()
     server_display = 'Se bajó la barra E' + number
     server_data_table_modificator(float(time_stamp) + 5, ' ', server_display, ' ', ' ')
@@ -77,9 +80,12 @@ def laser_off_e(message):
     '''The car start to enter the parking lot so a semaphore to ensure that only one car
     is going through the entrance, the sempahone is store in a list and the data in the table
     is updated'''
-    [time_stamp, command, number] = get_data_command(message)
-    
+    [time_stamp, command, number] = get_data_command(message, 2)
+
+    # Toma el semaforo de la entrada correspondiente
     sem_entries_exits[int(number) - 1].acquire()
+
+    # Modificacion de la tabla
     sem_mutex_table.acquire()
     server_data_table_modificator(time_stamp, message[message.find(command):], ' ', ' ', ' ')
     server_display = 'Auto comienza a pasar E' + number
@@ -90,16 +96,20 @@ def laser_off_e(message):
 def mete_tarjeta(message):
     '''It verifies that the client paid the ticket bill, and if not,
     the barrier stays down, otherwise it starts to lift'''
-    [time_stamp, command, number] = get_data_command(message)
+
+    # Separando el mensaje en valores
+    [time_stamp, command, number] = get_data_command(message, 2)
     number = number[:number.find(' ')]
     paid = int(number[number.find(' ') + 1:])
 
+    # Modificacion de la tabla
     sem_mutex_table.acquire()
     server_data_table_modificator(time_stamp, message[message.find(command):], ' ', ' ', ' ')
     server_display = 'Auto quiere salir por salida S' + number
     server_data_table_modificator(time_stamp, ' ', server_display, ' ', ' ')
     sem_mutex_table.release()
-    
+
+    # Verificando si pago el don
     if paid == 1:
         sem_mutex_table.acquire()
         server_display = 'Se levantó la barrera S' + number
@@ -115,7 +125,8 @@ def mete_tarjeta(message):
 def recoge_tarjeta(message):
     '''Function to indicate that the client
     has taken the card To enter the parking lot'''
-    [time_stamp, command, number] = get_data_command(message)
+    # Separando el mensaje en valores
+    [time_stamp, command, number] = get_data_command(message, 2)
 
     sem_mutex_table.acquire()
     server_data_table_modificator(time_stamp, message[message.find(command):], ' ', ' ', ' ')
@@ -133,7 +144,7 @@ def recoge_tarjeta(message):
 def oprime_botom_thread(message):
     '''Thread to handle what happen with the function oprime boton from
     the client'''
-    [time_stamp, command, number] = get_data_command(message)
+    [time_stamp, command, number] = get_data_command(message, 2)
 
     sem_mutex_table.acquire()
     server_data_table_modificator(time_stamp, message[message.find(command):], ' ', occupied_places_var, free_places_var)
@@ -154,7 +165,7 @@ def oprime_boton(message):
     it will display: No hay lugar, espere un poco y vuelva a imprimir boton. It start
     a thread if there available places'''
 
-    [time_stamp, command, number] = get_data_command(message)
+    [time_stamp, command, number] = get_data_command(message, 2)
 
     if int(number) <= number_entries and int(number_entries) > 0:
         if sem_free_places.acquire(timeout=1):
@@ -173,22 +184,22 @@ def abrir_cerrar(message):
     is not open yet. if it is the instruction to oppen data is added to the table
     en the free places semaphore value is set. If the command is cerrar, return false.'''
 
-    [time_stamp, command, number] = get_data_command(message)
+    [time_stamp, command] = get_data_command(message, 1)
     global free_places_var, server_data_table, occupied_places_var, number_entries, number_exits
-    if 'Apertura' in command:
+    if 'apertura' in command.lower():
+        [time_stamp, command, number, entries, exits] = get_data_command(message, 4)
         server_data_table['Time-stamp'].append(time_stamp)
         server_data_table['Command'].append(message[message.find(command):])
-        server_data_table['Free'].append(int(number[:number.find(' ')]))
+        server_data_table['Free'].append(number)
         server_data_table['Occupied'].append(0)
-        number = message[(message.find(command) + len(command) + 1):message.find(' ', (message.find(command) + len(command) + 1))]
-        number_entries = int(message[(message.find(number) + len(number) + 1) : message.find(' ', (message.find(number) + len(number) + 1))])
-        number_exits = int(message[(message.find(str(number_entries)) + len(str(number_entries)) + 1) : ])
-        server_data_table['Server display'].append('Se abre un estacionamiento de ' + number + ' lugares, ' + str(number_entries) + ' puertas de entrada y ' + str(number_exits) + ' de salida')
-        free_places_var = int(number[:number.find(' ')])
+        number_entries = int(entries)
+        number_exits = int(exits)
+        server_data_table['Server display'].append('Se abre un estacionamiento de ' + number + ' lugares, ' + entries + ' puertas de entrada y ' + exits + ' de salida')
+        free_places_var = int(number)
         
         return True
 
-    elif 'Cierre' in command:
+    elif 'cierre' in command.lower():
         server_data_table['Time-stamp'].append(time_stamp)
         server_data_table['Command'].append(message[message.find(command):])
         server_data_table['Free'].append(free_places_var)
@@ -214,7 +225,7 @@ def data_processor(message):
                  'metetarjeta': mete_tarjeta, 'laseroffe': laser_off_e, 'laserone': laser_on_e,
                  'laseroffs': laser_off_s, 'laserons': laser_on_s}
 
-    [time_stamp, command, number] = get_data_command(message)
+    [time_stamp, command, number] = get_data_command(message, 2)
 
     functions[command.lower()](message)
 
@@ -266,6 +277,8 @@ try:
         if data:
 
             client_message = data.decode('utf-8')
+
+
 
             if parking_open:
 

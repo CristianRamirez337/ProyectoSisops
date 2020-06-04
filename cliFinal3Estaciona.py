@@ -7,7 +7,7 @@ import socket, sys, time
 #
 # network initialization
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # create socket
-server_address = ('localhost', 10000) 					 # connect socket to port
+server_address = ('localhost', 8080) 					 # connect socket to port
 print ( 'connecting to %s port %s' % server_address)
 sock.connect(server_address)                             # ready. Connection established
 
