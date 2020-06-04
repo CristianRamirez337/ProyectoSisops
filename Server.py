@@ -8,7 +8,7 @@ import socket
 import sys
 import threading
 import queue
-from time import gmtime, strftime, sleep, time, thread_time_ns
+from time import gmtime, strftime, sleep, time
 from tabulate import tabulate
 
 # GLobal variables
@@ -64,7 +64,9 @@ def laser_on_e(message):
     server_display = 'Auto termina de pasar E' + number
     server_data_table_modificator(time_stamp, ' ', server_display, occupied_places_var, free_places_var)
     sem_mutex_table.release()
-    sem_entries_exits[int(number)].release()
+
+    # Se libera semaforo para que pueda pasar un coche por la misma entrada
+    sem_entries_exits[int(number) - 1].release()
 
     sem_mutex_table.acquire()
     server_display = 'Se bajó la barra E' + number
@@ -77,7 +79,7 @@ def laser_off_e(message):
     is updated'''
     [time_stamp, command, number] = get_data_command(message)
     
-    sem_entries_exits[int(number)].acquire()
+    sem_entries_exits[int(number) - 1].acquire()
     sem_mutex_table.acquire()
     server_data_table_modificator(time_stamp, message[message.find(command):], ' ', ' ', ' ')
     server_display = 'Auto comienza a pasar E' + number
@@ -122,7 +124,7 @@ def recoge_tarjeta(message):
     sem_mutex_table.release()
 
     sem_mutex_table.acquire()
-    server_display = 'Se levntó la barrera E' + number
+    server_display = 'Se levantó la barrera E' + number
     server_data_table_modificator(float(time_stamp) + 5, ' ', server_display, ' ', ' ')
     sem_mutex_table.release()
 
