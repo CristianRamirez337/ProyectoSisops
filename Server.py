@@ -130,8 +130,11 @@ def laser_off_e(message):
     server_data_table_modificator(time_stamp, ' ', server_display, ' ', ' ')
     sem_mutex_table.release()
 
+
 def mete_tarjeta_thread(message):
     # Modificacion de la tabla
+    [time_stamp, command, number] = get_data_command(message, 2)
+
     sem_mutex_table.acquire()
     server_data_table_modificator(time_stamp, message[message.find(command):], ' ', ' ', ' ')
     server_display = 'Auto quiere salir por S' + number
@@ -153,7 +156,7 @@ def mete_tarjeta(message):
 
     if int(number) <= number_exits and int(number_exits) > 0:
         # Verificando si pago el don
-        if paid == 1:
+        if int(paid) == 1:
 
             exit_thread = threading.Thread(target=mete_tarjeta_thread, args=(message,))
             exit_thread.start()
